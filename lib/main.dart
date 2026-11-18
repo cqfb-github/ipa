@@ -175,7 +175,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-/// TAB 1: Stream Extractor Screen with Glossy Cards & 4K Streaming
+/// TAB 1: Stream Extractor Screen
 class ExtractorScreen extends StatefulWidget {
   const ExtractorScreen({super.key});
 
@@ -758,7 +758,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
   }
 }
 
-/// TAB 2: TMDB Cinema & TV Hub with In-App API Key & Read Token Support
+/// TAB 2: TMDB Cinema & TV Hub with In-App Credentials & Interactive Season Accordions
 class TmdbDiscoveryScreen extends StatefulWidget {
   const TmdbDiscoveryScreen({super.key});
 
@@ -1180,7 +1180,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
   }
 }
 
-/// Detail Screen for TMDB Shows & Movies with Episode Guides & Trailer Streamer
+/// Detail Screen for TMDB Shows & Movies with Interactive Episode Explorer & Fast Trailer Launcher
 class TmdbDetailScreen extends StatefulWidget {
   final int id;
   final bool isTv;
@@ -1207,6 +1207,11 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
   Map<String, dynamic>? _details;
   List<dynamic> _trailers = [];
   bool _loading = true;
+
+  // Track expanded seasons and their loaded episodes
+  final Map<int, List<dynamic>> _seasonEpisodes = {};
+  final Set<int> _expandedSeasons = {};
+  final Set<int> _loadingSeasons = {};
 
   @override
   void initState() {
@@ -1253,13 +1258,67 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
     setState(() => _loading = false);
   }
 
-  Future<void> _playTrailer(String youtubeKey, String trailerTitle) async {
+  Future<void> _toggleSeason(int seasonNumber) async {
     HapticFeedback.lightImpact();
+    if (_expandedSeasons.contains(seasonNumber)) {
+      setState(() => _expandedSeasons.remove(seasonNumber));
+      return;
+    }
+
+    if (_seasonEpisodes.containsKey(seasonNumber)) {
+      setState(() => _expandedSeasons.add(seasonNumber));
+      return;
+    }
+
+    setState(() => _loadingSeasons.add(seasonNumber));
+    try {
+      final config = _buildHeadersAndParams();
+      final res = await _dio.get(
+        'https://api.themoviedb.org/3/tv/${widget.id}/season/$seasonNumber',
+        queryParameters: config['params'],
+        options: config['options'],
+      );
+      setState(() {
+        _seasonEpisodes[seasonNumber] = res.data['episodes'] ?? [];
+        _expandedSeasons.add(seasonNumber);
+      });
+    } catch (_) {}
+    setState(() => _loadingSeasons.remove(seasonNumber));
+  }
+
+  Future<void> _playTrailer(String youtubeKey, String trailerTitle) async {
+    HapticFeedback.mediumImpact();
+
+    // Show instant visual buffering indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141420),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFFF2A42).withOpacity(0.5)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFFFF2A42), strokeWidth: 2.5),
+              SizedBox(width: 16),
+              Text('Connecting to trailer...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            ],
+          ),
+        ),
+      ),
+    );
+
     try {
       final manifest = await _yt.videos.streamsClient.getManifest(youtubeKey);
       final stream = manifest.muxed.sortByVideoQuality().first;
 
       if (mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1273,6 +1332,7 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not stream trailer: $e')),
         );
@@ -1333,9 +1393,9 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
                   else
                     Container(color: Colors.black),
                   Container(
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.transparent, const Color(0xFF07070A)],
+                        colors: [Colors.transparent, Color(0xFF07070A)],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -1409,40 +1469,116 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
                     const SizedBox(height: 20),
                   ],
                   if (widget.isTv && seasons.isNotEmpty) ...[
-                    const Text('SEASONS & EPISODES',
+                    const Text('SEASONS & EPISODE EXPLORER',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.2)),
                     const SizedBox(height: 12),
-                    ...seasons.map((s) => Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF14141E),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                    ...seasons.map((s) {
+                      final seasonNum = s['season_number'] ?? 0;
+                      final isExpanded = _expandedSeasons.contains(seasonNum);
+                      final isLoading = _loadingSeasons.contains(seasonNum);
+                      final episodes = _seasonEpisodes[seasonNum] ?? [];
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF14141E),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: isExpanded ? const Color(0xFFFF2A42).withOpacity(0.4) : Colors.white.withOpacity(0.06),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(s['name'] ?? 'Season', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  if (s['air_date'] != null)
-                                    Text('Premiered: ${s['air_date']}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(8),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
+                            ListTile(
+                              onTap: () => _toggleSeason(seasonNum),
+                              title: Text(s['name'] ?? 'Season $seasonNum',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              subtitle: Text('${s['episode_count'] ?? 0} Episodes • Tap to browse',
+                                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                              trailing: isLoading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF2A42)),
+                                    )
+                                  : Icon(
+                                      isExpanded ? CupertinoIcons.chevron_up : CupertinoIcons.chevron_down,
+                                      size: 18,
+                                      color: Colors.white54,
+                                    ),
+                            ),
+                            if (isExpanded) ...[
+                              const Divider(height: 1, color: Colors.white10),
+                              if (episodes.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Text('No episode details available.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                                )
+                              else
+                                ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: episodes.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                                  itemBuilder: (context, epIdx) {
+                                    final ep = episodes[epIdx];
+                                    final epTitle = ep['name'] ?? 'Episode ${ep['episode_number']}';
+                                    final epNum = ep['episode_number'];
+                                    final epOverview = ep['overview'] ?? '';
+                                    final epStill = ep['still_path'];
+
+                                    return Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(10),
+                                            child: Container(
+                                              width: 90,
+                                              height: 54,
+                                              color: Colors.white10,
+                                              child: epStill != null
+                                                  ? Image.network(
+                                                      'https://image.tmdb.org/t/p/w300$epStill',
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.tv, size: 20)),
+                                                    )
+                                                  : const Center(child: Icon(Icons.tv, size: 20)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'EP $epNum • $epTitle',
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  epOverview.isNotEmpty ? epOverview : 'No description available.',
+                                                  style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.3),
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                 ),
-                                child: Text('${s['episode_count'] ?? 0} Episodes',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
-                              ),
                             ],
-                          ),
-                        )),
+                          ],
+                        ),
+                      );
+                    }),
                   ],
                 ],
               ),
@@ -1454,7 +1590,7 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
   }
 }
 
-/// TAB 3: Saved Media Screen (Offline Vault) with AirDrop & Export
+/// TAB 3: Saved Media Screen (Offline Vault)
 class SavedMediaScreen extends StatefulWidget {
   const SavedMediaScreen({super.key});
 
