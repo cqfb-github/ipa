@@ -11,6 +11,8 @@ import 'package:chewie/chewie.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,17 +59,24 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
-  final List<Widget> _screens = const [
-    ExtractorScreen(),
-    TmdbDiscoveryScreen(),
-    SavedMediaScreen(),
-  ];
+  final GlobalKey<ExtractorScreenState> _extractorKey = GlobalKey();
+
+  void navigateToExtractorWithQuery(String query) {
+    setState(() => _currentIndex = 0);
+    _extractorKey.currentState?.setQueryAndSearch(query);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      ExtractorScreen(key: _extractorKey),
+      TmdbDiscoveryScreen(onSearchInExtractor: navigateToExtractorWithQuery),
+      const SavedMediaScreen(),
+    ];
+
     return Scaffold(
       extendBody: true,
-      body: _screens[_currentIndex],
+      body: screens[_currentIndex],
       bottomNavigationBar: Container(
         margin: const EdgeInsets.only(left: 20, right: 20, bottom: 28),
         child: ClipRRect(
@@ -180,10 +189,10 @@ class ExtractorScreen extends StatefulWidget {
   const ExtractorScreen({super.key});
 
   @override
-  State<ExtractorScreen> createState() => _ExtractorScreenState();
+  State<ExtractorScreen> createState() => ExtractorScreenState();
 }
 
-class _ExtractorScreenState extends State<ExtractorScreen> {
+class ExtractorScreenState extends State<ExtractorScreen> {
   final TextEditingController _urlController = TextEditingController();
   final YoutubeExplode _yt = YoutubeExplode();
 
@@ -196,6 +205,11 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
   bool _isDownloading = false;
   String _downloadSpeed = '';
   String _statusMessage = '';
+
+  void setQueryAndSearch(String text) {
+    _urlController.text = text;
+    _fetchMedia();
+  }
 
   Future<void> _fetchMedia() async {
     final rawUrl = _urlController.text.trim();
@@ -212,11 +226,24 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
       _videoMeta = null;
       _videoStreams.clear();
       _audioStreams.clear();
-      _statusMessage = 'Extracting 4K / 1080p stream manifests...';
+      _statusMessage = 'Extracting stream manifests...';
     });
 
     try {
-      final video = await _yt.videos.get(rawUrl);
+      Video? video;
+      // Check if user entered a direct video link or a search keyword
+      if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+        video = await _yt.videos.get(rawUrl);
+      } else {
+        // Search query
+        final searchResults = await _yt.search.search(rawUrl);
+        if (searchResults.isNotEmpty) {
+          video = searchResults.first;
+        } else {
+          throw Exception('No videos matched this title.');
+        }
+      }
+
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
 
       final allVideo = manifest.video.toList()
@@ -239,7 +266,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
       HapticFeedback.selectionClick();
     } catch (e) {
       setState(() {
-        _statusMessage = 'Could not resolve stream. Check URL or connection.';
+        _statusMessage = 'Could not resolve stream: $e';
       });
       HapticFeedback.heavyImpact();
     } finally {
@@ -428,9 +455,9 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
               controller: _urlController,
               style: const TextStyle(fontSize: 15),
               decoration: InputDecoration(
-                hintText: 'Paste video link or direct URL...',
-                hintStyle: const TextStyle(color: Colors.white30, fontSize: 14),
-                prefixIcon: const Icon(CupertinoIcons.link, color: Colors.white38, size: 18),
+                hintText: 'Paste video link or enter title to search...',
+                hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+                prefixIcon: const Icon(CupertinoIcons.search, color: Colors.white38, size: 18),
                 suffixIcon: Padding(
                   padding: const EdgeInsets.all(6.0),
                   child: GestureDetector(
@@ -758,15 +785,19 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
   }
 }
 
-/// TAB 2: TMDB Cinema & TV Hub with In-App Credentials & Interactive Season Accordions
+/// TAB 2: TMDB Cinema & TV Hub
 class TmdbDiscoveryScreen extends StatefulWidget {
-  const TmdbDiscoveryScreen({super.key});
+  final Function(String) onSearchInExtractor;
+
+  const TmdbDiscoveryScreen({super.key, required this.onSearchInExtractor});
 
   @override
   State<TmdbDiscoveryScreen> createState() => _TmdbDiscoveryScreenState();
 }
 
 class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
+  static const String _defaultApiKey = '2dca580c2a14b55200e784d157207b4d';
+
   final TextEditingController _searchController = TextEditingController();
   final Dio _dio = Dio();
   String _apiKey = '';
@@ -774,6 +805,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
   List<dynamic> _searchResults = [];
   bool _loading = false;
   String _status = '';
+  int _selectedCategory = 0; // 0: All, 1: Movies, 2: TV Shows, 3: Anime
 
   @override
   void initState() {
@@ -787,12 +819,11 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
       _apiKey = prefs.getString('tmdb_api_key') ?? '';
       _readToken = prefs.getString('tmdb_read_token') ?? '';
     });
-    if (_hasCredentials) {
-      _fetchTrending();
-    }
+    _fetchTrending();
   }
 
-  bool get _hasCredentials => _apiKey.isNotEmpty || _readToken.isNotEmpty;
+  bool get _hasCustomCredentials => _apiKey.isNotEmpty || _readToken.isNotEmpty;
+  bool get _hasCredentials => true;
 
   Map<String, dynamic> _buildHeadersAndParams([Map<String, dynamic>? queryParams]) {
     final Map<String, dynamic> params = queryParams ?? {};
@@ -802,6 +833,8 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
       options.headers = {'Authorization': 'Bearer $_readToken'};
     } else if (_apiKey.isNotEmpty) {
       params['api_key'] = _apiKey;
+    } else {
+      params['api_key'] = _defaultApiKey;
     }
 
     return {'params': params, 'options': options};
@@ -865,7 +898,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Paste either your API Key (v3) OR your API Read Access Token (v4). It is encrypted strictly on your iPhone.',
+                'Paste your free TMDB API Key (v3) or Read Access Token (v4). It is saved locally on your iPhone.',
                 style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 18),
@@ -919,14 +952,69 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
     );
   }
 
+  Widget _categoryChip(int index, String label) {
+    final isSelected = _selectedCategory == index;
+    return GestureDetector(
+      onTap: () {
+        if (_selectedCategory == index) return;
+        HapticFeedback.lightImpact();
+        setState(() => _selectedCategory = index);
+        _fetchTrending();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF2A42) : const Color(0xFF141420),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF2A42) : Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _fetchTrending() async {
-    if (!_hasCredentials) return;
     setState(() => _loading = true);
     try {
       final config = _buildHeadersAndParams();
+      String endpoint;
+      Map<String, dynamic> extraParams = {};
+
+      switch (_selectedCategory) {
+        case 1:
+          endpoint = 'https://api.themoviedb.org/3/trending/movie/day';
+          break;
+        case 2:
+          endpoint = 'https://api.themoviedb.org/3/trending/tv/day';
+          break;
+        case 3:
+          endpoint = 'https://api.themoviedb.org/3/discover/tv';
+          extraParams = {
+            'with_genres': '16',
+            'with_original_language': 'ja',
+            'sort_by': 'popularity.desc',
+          };
+          break;
+        case 0:
+        default:
+          endpoint = 'https://api.themoviedb.org/3/trending/all/day';
+          break;
+      }
+
+      final queryParams = Map<String, dynamic>.from(config['params'])..addAll(extraParams);
       final res = await _dio.get(
-        'https://api.themoviedb.org/3/trending/all/day',
-        queryParameters: config['params'],
+        endpoint,
+        queryParameters: queryParams,
         options: config['options'],
       );
       setState(() {
@@ -934,7 +1022,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
         _status = '';
       });
     } catch (e) {
-      setState(() => _status = 'Failed to load trending items. Verify your TMDB keys.');
+      setState(() => _status = 'Failed to load catalog. Check your internet connection.');
     } finally {
       setState(() => _loading = false);
     }
@@ -942,7 +1030,10 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
 
   Future<void> _searchQuery() async {
     final query = _searchController.text.trim();
-    if (query.isEmpty || !_hasCredentials) return;
+    if (query.isEmpty) {
+      _fetchTrending();
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _loading = true;
@@ -957,10 +1048,10 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
       );
       setState(() {
         _searchResults = res.data['results'] ?? [];
-        if (_searchResults.isEmpty) _status = 'No titles found.';
+        if (_searchResults.isEmpty) _status = 'No titles found for "$query".';
       });
     } catch (e) {
-      setState(() => _status = 'Search failed. Check your TMDB credentials.');
+      setState(() => _status = 'Search failed. Please try again.');
     } finally {
       setState(() => _loading = false);
     }
@@ -984,7 +1075,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
                       'TMDB Cinema',
                       style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.6),
                     ),
-                    Text('Global Catalog & Episode Guides', style: TextStyle(fontSize: 12, color: Colors.white38)),
+                    Text('Global Catalog, Anime & Instant Streaming', style: TextStyle(fontSize: 12, color: Colors.white38)),
                   ],
                 ),
                 IconButton(
@@ -995,8 +1086,8 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      !_hasCredentials ? CupertinoIcons.settings : CupertinoIcons.gear,
-                      color: !_hasCredentials ? Colors.orangeAccent : Colors.white70,
+                      _hasCustomCredentials ? CupertinoIcons.gear : CupertinoIcons.settings,
+                      color: _hasCustomCredentials ? const Color(0xFFFF2A42) : Colors.white70,
                       size: 20,
                     ),
                   ),
@@ -1005,68 +1096,63 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
               ],
             ),
           ),
-          if (!_hasCredentials)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.orangeAccent.withOpacity(0.15), Colors.deepOrangeAccent.withOpacity(0.05)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(CupertinoIcons.sparkles, color: Colors.orangeAccent, size: 28),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Connect Your TMDB Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          const SizedBox(height: 4),
-                          const Text('Tap the gear icon top right to paste your free TMDB API Key. Search series like Prison Break, stream trailers, and browse seasons.',
-                              style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.3)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF12121A),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  )
+                ],
               ),
-            )
-          else ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF12121A),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    )
-                  ],
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search Prison Break, Breaking Bad, anime, movies...',
+                  hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+                  prefixIcon: const Icon(CupertinoIcons.search, color: Colors.white38, size: 18),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(CupertinoIcons.clear_circled, size: 16, color: Colors.white38),
+                          onPressed: () {
+                            _searchController.clear();
+                            _fetchTrending();
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
                 ),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Search Prison Break, Breaking Bad, movies...',
-                    hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                    prefixIcon: const Icon(CupertinoIcons.search, color: Colors.white38, size: 18),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-                  ),
-                  onSubmitted: (_) => _searchQuery(),
-                ),
+                onSubmitted: (_) => _searchQuery(),
               ),
             ),
-          ],
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _categoryChip(0, '🔥 Trending'),
+                  const SizedBox(width: 8),
+                  _categoryChip(1, '🎬 Movies'),
+                  const SizedBox(width: 8),
+                  _categoryChip(2, '📺 TV Series'),
+                  const SizedBox(width: 8),
+                  _categoryChip(3, '⛩️ Anime'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFFFF2A42))))
           else if (_status.isNotEmpty)
@@ -1101,6 +1187,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
                             apiKey: _apiKey,
                             readToken: _readToken,
                             title: title,
+                            onSearchInExtractor: widget.onSearchInExtractor,
                           ),
                         ),
                       );
@@ -1180,13 +1267,14 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
   }
 }
 
-/// Detail Screen for TMDB Shows & Movies with Interactive Episode Explorer & Fast Trailer Launcher
+/// Detail Screen for TMDB Shows & Movies with One-Tap Extractor Launcher & Native Stream Player
 class TmdbDetailScreen extends StatefulWidget {
   final int id;
   final bool isTv;
   final String apiKey;
   final String readToken;
   final String title;
+  final Function(String) onSearchInExtractor;
 
   const TmdbDetailScreen({
     super.key,
@@ -1195,6 +1283,7 @@ class TmdbDetailScreen extends StatefulWidget {
     required this.apiKey,
     required this.readToken,
     required this.title,
+    required this.onSearchInExtractor,
   });
 
   @override
@@ -1208,7 +1297,6 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
   List<dynamic> _trailers = [];
   bool _loading = true;
 
-  // Track expanded seasons and their loaded episodes
   final Map<int, List<dynamic>> _seasonEpisodes = {};
   final Set<int> _expandedSeasons = {};
   final Set<int> _loadingSeasons = {};
@@ -1227,9 +1315,34 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
       options.headers = {'Authorization': 'Bearer ${widget.readToken}'};
     } else if (widget.apiKey.isNotEmpty) {
       params['api_key'] = widget.apiKey;
+    } else {
+      params['api_key'] = _TmdbDiscoveryScreenState._defaultApiKey;
     }
 
     return {'params': params, 'options': options};
+  }
+
+  void _openStreamPlayer({
+    int? seasonNumber,
+    int? episodeNumber,
+    String? episodeTitle,
+    int? totalEpisodes,
+  }) {
+    HapticFeedback.mediumImpact();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VidRiftPlayerScreen(
+          tmdbId: widget.id,
+          isTv: widget.isTv,
+          seasonNumber: seasonNumber,
+          episodeNumber: episodeNumber,
+          title: widget.title,
+          episodeTitle: episodeTitle,
+          totalEpisodesInSeason: totalEpisodes,
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchDetails() async {
@@ -1289,7 +1402,6 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
   Future<void> _playTrailer(String youtubeKey, String trailerTitle) async {
     HapticFeedback.mediumImpact();
 
-    // Show instant visual buffering indicator
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1315,10 +1427,13 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
 
     try {
       final manifest = await _yt.videos.streamsClient.getManifest(youtubeKey);
-      final stream = manifest.muxed.sortByVideoQuality().first;
+      // Grab the highest resolution stream available
+      final stream = manifest.muxed.isNotEmpty
+          ? manifest.muxed.sortByVideoQuality().first
+          : manifest.video.sortByVideoQuality().first;
 
       if (mounted) {
-        Navigator.pop(context); // Dismiss loading dialog
+        Navigator.pop(context); // Dismiss dialog
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1332,9 +1447,9 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Dismiss loading dialog
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not stream trailer: $e')),
+          SnackBar(content: Text('Could not play trailer: $e')),
         );
       }
     }
@@ -1440,9 +1555,35 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.2)),
                   const SizedBox(height: 8),
                   Text(overview, style: const TextStyle(fontSize: 14, color: Colors.white70, height: 1.45)),
+                  const SizedBox(height: 18),
+                  // Primary Quick Stream Action Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF2A42),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 8,
+                        shadowColor: const Color(0xFFFF2A42).withOpacity(0.5),
+                      ),
+                      icon: const Icon(CupertinoIcons.play_circle_fill, size: 22),
+                      label: Text(
+                        widget.isTv ? 'WATCH SERIES (S1 E1)' : 'WATCH FULL MOVIE',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.5),
+                      ),
+                      onPressed: () => _openStreamPlayer(
+                        seasonNumber: widget.isTv ? 1 : null,
+                        episodeNumber: widget.isTv ? 1 : null,
+                        episodeTitle: widget.isTv ? 'Episode 1' : null,
+                        totalEpisodes: widget.isTv ? 24 : null,
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 26),
                   if (_trailers.isNotEmpty) ...[
-                    const Text('OFFICIAL TRAILERS (AD-FREE PROMOTION STREAM)',
+                    const Text('OFFICIAL TRAILERS & CLIPS',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF2A42), letterSpacing: 1.2)),
                     const SizedBox(height: 12),
                     ..._trailers.map((tr) => Container(
@@ -1553,11 +1694,55 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  'EP $epNum • $epTitle',
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        'EP $epNum • $epTitle',
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    ElevatedButton.icon(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: const Color(0xFFFF2A42),
+                                                        foregroundColor: Colors.white,
+                                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        elevation: 0,
+                                                        minimumSize: Size.zero,
+                                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                      ),
+                                                      icon: const Icon(CupertinoIcons.play_arrow_solid, size: 10),
+                                                      label: const Text('Watch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                                      onPressed: () => _openStreamPlayer(
+                                                        seasonNumber: seasonNum,
+                                                        episodeNumber: epNum,
+                                                        episodeTitle: epTitle,
+                                                        totalEpisodes: episodes.length,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        HapticFeedback.lightImpact();
+                                                        final query = '${widget.title} S${seasonNum.toString().padLeft(2, '0')}E${epNum.toString().padLeft(2, '0')}';
+                                                        Navigator.pop(context); // back to main tabs
+                                                        widget.onSearchInExtractor(query);
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.all(6),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white.withOpacity(0.08),
+                                                          borderRadius: BorderRadius.circular(8),
+                                                        ),
+                                                        child: const Icon(CupertinoIcons.search, size: 13, color: Colors.white70),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                                 const SizedBox(height: 4),
                                                 Text(
@@ -1585,6 +1770,369 @@ class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// VidRift Native WebKit Stream Player
+class VidRiftPlayerScreen extends StatefulWidget {
+  final int tmdbId;
+  final bool isTv;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String title;
+  final String? episodeTitle;
+  final int? totalEpisodesInSeason;
+
+  const VidRiftPlayerScreen({
+    super.key,
+    required this.tmdbId,
+    required this.isTv,
+    this.seasonNumber,
+    this.episodeNumber,
+    required this.title,
+    this.episodeTitle,
+    this.totalEpisodesInSeason,
+  });
+
+  @override
+  State<VidRiftPlayerScreen> createState() => _VidRiftPlayerScreenState();
+}
+
+class _VidRiftPlayerScreenState extends State<VidRiftPlayerScreen> {
+  late final WebViewController _controller;
+  late int _currentSeason;
+  late int _currentEpisode;
+  String? _currentEpTitle;
+  bool _isLoading = true;
+  double _progress = 0.0;
+  bool _showControls = true;
+  bool _isLandscape = false;
+
+  String get _embedUrl {
+    if (widget.isTv) {
+      return 'https://embed.vidrift.net/embed/tv/${widget.tmdbId}/$_currentSeason/$_currentEpisode';
+    } else {
+      return 'https://embed.vidrift.net/embed/movie/${widget.tmdbId}';
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSeason = widget.seasonNumber ?? 1;
+    _currentEpisode = widget.episodeNumber ?? 1;
+    _currentEpTitle = widget.episodeTitle;
+
+    late final PlatformWebViewControllerCreationParams params;
+    if (WebViewPlatform.instance is WebKitWebViewPlatform) {
+      params = WebKitWebViewControllerCreationParams(
+        allowsInlineMediaPlayback: true,
+        mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+      );
+    } else {
+      params = const PlatformWebViewControllerCreationParams();
+    }
+
+    final WebViewController controller =
+        WebViewController.fromPlatformCreationParams(params);
+
+    controller
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setUserAgent(
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1')
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            if (mounted) {
+              setState(() {
+                _progress = progress / 100.0;
+              });
+            }
+          },
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() => _isLoading = true);
+            }
+          },
+          onPageFinished: (String url) {
+            if (mounted) {
+              setState(() => _isLoading = false);
+            }
+          },
+          onWebResourceError: (WebResourceError error) {},
+          onNavigationRequest: (NavigationRequest request) {
+            final uri = Uri.tryParse(request.url);
+            final host = uri?.host.toLowerCase() ?? '';
+            if (host.contains('vidrift.net') ||
+                host.isEmpty ||
+                request.url.startsWith('about:') ||
+                request.url.startsWith('blob:') ||
+                request.url.contains('.m3u8') ||
+                request.url.contains('.mp4') ||
+                request.url.contains('.ts')) {
+              return NavigationDecision.navigate;
+            }
+            return NavigationDecision.prevent;
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(_embedUrl));
+
+    _controller = controller;
+  }
+
+  void _switchEpisode(int delta) {
+    final nextEp = _currentEpisode + delta;
+    if (nextEp < 1) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _currentEpisode = nextEp;
+      _currentEpTitle = 'Episode $nextEp';
+      _isLoading = true;
+      _progress = 0.0;
+    });
+    _controller.loadRequest(Uri.parse(_embedUrl));
+  }
+
+  void _reloadStream() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _isLoading = true;
+      _progress = 0.0;
+    });
+    _controller.reload();
+  }
+
+  void _toggleOrientation() {
+    HapticFeedback.lightImpact();
+    if (_isLandscape) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
+    setState(() => _isLandscape = !_isLandscape);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        top: !_isLandscape,
+        bottom: !_isLandscape,
+        left: false,
+        right: false,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _showControls = !_showControls);
+                },
+                child: WebViewWidget(controller: _controller),
+              ),
+            ),
+            if (_isLoading)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: LinearProgressIndicator(
+                  value: _progress > 0 ? _progress : null,
+                  backgroundColor: Colors.transparent,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF2A42)),
+                  minHeight: 2.5,
+                ),
+              ),
+            if (_isLoading && _progress < 0.6)
+              Positioned(
+                bottom: 80,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141420).withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF2A42)),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Connecting to VidRift Stream...',
+                          style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              top: _showControls ? 0 : -90,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.85), Colors.transparent],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(CupertinoIcons.chevron_back, color: Colors.white, size: 20),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (widget.isTv)
+                            Text(
+                              'Season $_currentSeason • ${_currentEpTitle ?? 'Episode $_currentEpisode'}',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFFFF2A42), fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(CupertinoIcons.arrow_clockwise, color: Colors.white, size: 18),
+                      ),
+                      onPressed: _reloadStream,
+                    ),
+                    IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _isLandscape ? CupertinoIcons.device_phone_portrait : CupertinoIcons.device_phone_landscape,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                      onPressed: _toggleOrientation,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (widget.isTv)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                bottom: _showControls ? 0 : -90,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withOpacity(0.12),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(CupertinoIcons.backward_fill, size: 12),
+                        label: const Text('Prev Ep', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _currentEpisode > 1 ? () => _switchEpisode(-1) : null,
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF2A42).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFF2A42).withOpacity(0.4)),
+                        ),
+                        child: Text(
+                          'S$_currentSeason E$_currentEpisode',
+                          style: const TextStyle(color: Color(0xFFFF2A42), fontWeight: FontWeight.w900, fontSize: 13),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF2A42),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(CupertinoIcons.forward_fill, size: 12),
+                        label: const Text('Next Ep', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: (widget.totalEpisodesInSeason == null || _currentEpisode < widget.totalEpisodesInSeason!)
+                            ? () => _switchEpisode(1)
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
