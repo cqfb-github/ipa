@@ -995,7 +995,7 @@ class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      !_hasCredentials ? CupertinoIcons.gear_badge_xmark : CupertinoIcons.gear,
+                      !_hasCredentials ? CupertinoIcons.settings : CupertinoIcons.gear,
                       color: !_hasCredentials ? Colors.orangeAccent : Colors.white70,
                       size: 20,
                     ),
