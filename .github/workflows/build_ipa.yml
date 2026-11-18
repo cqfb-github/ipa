@@ -1,0 +1,62 @@
+name: Build Unsigned IPA for Signulous
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Get Dependencies
+        run: |
+          if [ -d "stream_vault" ]; then cd stream_vault; fi
+          flutter pub get
+
+      - name: Create iOS Structure if missing
+        run: |
+          if [ -d "stream_vault" ]; then cd stream_vault; fi
+          if [ ! -d "ios/Runner.xcodeproj" ]; then
+            flutter create --platforms=ios .
+          fi
+
+      - name: Build iOS App (No Signing)
+        run: |
+          if [ -d "stream_vault" ]; then cd stream_vault; fi
+          flutter build ios --release --no-codesign
+
+      - name: Package Unsigned IPA
+        run: |
+          if [ -d "stream_vault" ]; then cd stream_vault; fi
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r StreamVault.ipa Payload
+          mv StreamVault.ipa ../../../
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamVault-Unsigned-IPA
+          path: |
+            StreamVault.ipa
+            stream_vault/StreamVault.ipa
+          retention-days: 7
