@@ -9,6 +9,8 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,7 @@ void main() {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF0F0F14),
+      systemNavigationBarColor: Color(0xFF08080C),
     ),
   );
   runApp(const StreamVaultApp());
@@ -32,11 +34,11 @@ class StreamVaultApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0A0A0E),
+        scaffoldBackgroundColor: const Color(0xFF07070A),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFE50914),
-          secondary: Color(0xFF9333EA),
-          surface: Color(0xFF14141C),
+          primary: Color(0xFFFF2A42),
+          secondary: Color(0xFF9D4EDD),
+          surface: Color(0xFF111118),
         ),
         fontFamily: '.SF Pro Display',
         useMaterial3: true,
@@ -57,6 +59,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
   final List<Widget> _screens = const [
     ExtractorScreen(),
+    TmdbDiscoveryScreen(),
     SavedMediaScreen(),
   ];
 
@@ -66,22 +69,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       extendBody: true,
       body: _screens[_currentIndex],
       bottomNavigationBar: Container(
-        margin: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
+        margin: const EdgeInsets.only(left: 20, right: 20, bottom: 28),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(32),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               decoration: BoxDecoration(
-                color: const Color(0xFF14141E).withOpacity(0.75),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
+                color: const Color(0xFF12121B).withOpacity(0.7),
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(color: Colors.white.withOpacity(0.12), width: 1.2),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withOpacity(0.6),
+                    blurRadius: 30,
+                    offset: const Offset(0, 15),
                   )
                 ],
               ),
@@ -96,6 +99,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   ),
                   _navButton(
                     index: 1,
+                    icon: CupertinoIcons.film,
+                    activeIcon: CupertinoIcons.film_fill,
+                    label: 'TMDB Cinema',
+                  ),
+                  _navButton(
+                    index: 2,
                     icon: CupertinoIcons.folder,
                     activeIcon: CupertinoIcons.folder_fill,
                     label: 'Vault',
@@ -105,7 +114,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           ),
         ),
-      ).animate().fadeIn(duration: 500.ms).slideY(begin: 0.3, end: 0),
+      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.3, end: 0),
     );
   }
 
@@ -122,21 +131,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         setState(() => _currentIndex = index);
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE50914).withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? const Color(0xFFFF2A42).withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(22),
           border: isSelected
-              ? Border.all(color: const Color(0xFFE50914).withOpacity(0.5), width: 1)
+              ? Border.all(color: const Color(0xFFFF2A42).withOpacity(0.6), width: 1)
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFFF2A42).withOpacity(0.3),
+                    blurRadius: 12,
+                  )
+                ]
               : null,
         ),
         child: Row(
           children: [
             Icon(
               isSelected ? activeIcon : icon,
-              color: isSelected ? const Color(0xFFE50914) : Colors.white54,
+              color: isSelected ? const Color(0xFFFF2A42) : Colors.white54,
               size: 20,
             ),
             if (isSelected) ...[
@@ -145,8 +162,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 label,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
+                  letterSpacing: -0.2,
                 ),
               ),
             ],
@@ -157,7 +175,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-/// Screen 1: Extractor with Live Analysis, Dynamic Island style cards, and Haptic actions
+/// TAB 1: Stream Extractor Screen with Glossy Cards & 4K Streaming
 class ExtractorScreen extends StatefulWidget {
   const ExtractorScreen({super.key});
 
@@ -171,7 +189,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
 
   bool _isLoading = false;
   Video? _videoMeta;
-  List<MuxedStreamInfo> _videoStreams = [];
+  List<VideoStreamInfo> _videoStreams = [];
   List<AudioOnlyStreamInfo> _audioStreams = [];
 
   double _downloadProgress = 0.0;
@@ -194,23 +212,34 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
       _videoMeta = null;
       _videoStreams.clear();
       _audioStreams.clear();
-      _statusMessage = 'Extracting stream metadata...';
+      _statusMessage = 'Extracting 4K / 1080p stream manifests...';
     });
 
     try {
       final video = await _yt.videos.get(rawUrl);
       final manifest = await _yt.videos.streamsClient.getManifest(video.id);
 
+      final allVideo = manifest.video.toList()
+        ..sort((a, b) => b.videoResolution.height.compareTo(a.videoResolution.height));
+
+      final Map<String, VideoStreamInfo> uniqueMap = {};
+      for (var s in allVideo) {
+        final label = s.videoQualityLabel;
+        if (!uniqueMap.containsKey(label)) {
+          uniqueMap[label] = s;
+        }
+      }
+
       setState(() {
         _videoMeta = video;
-        _videoStreams = manifest.muxed.sortByVideoQuality().toList();
-        _audioStreams = manifest.audioOnly.toList();
+        _videoStreams = uniqueMap.values.toList();
+        _audioStreams = manifest.audioOnly.sortByBitrate().reversed.toList();
         _statusMessage = '';
       });
       HapticFeedback.selectionClick();
     } catch (e) {
       setState(() {
-        _statusMessage = 'Could not resolve stream. Check URL or network.';
+        _statusMessage = 'Could not resolve stream. Check URL or connection.';
       });
       HapticFeedback.heavyImpact();
     } finally {
@@ -229,19 +258,20 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
     }
   }
 
-  Future<void> _downloadStream(StreamInfo stream, String title, bool isAudioOnly) async {
+  Future<void> _downloadStream(StreamInfo stream, String title, bool isAudioOnly, String qualityLabel) async {
     HapticFeedback.mediumImpact();
     setState(() {
       _isDownloading = true;
       _downloadProgress = 0.0;
-      _downloadSpeed = 'Connecting...';
+      _downloadSpeed = 'Establishing high-speed pipeline...';
     });
 
     try {
       final dir = await getApplicationDocumentsDirectory();
       final sanitized = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
       final ext = isAudioOnly ? 'm4a' : 'mp4';
-      final savePath = '${dir.path}/$sanitized.$ext';
+      final fileName = '${sanitized}_$qualityLabel.$ext';
+      final savePath = '${dir.path}/$fileName';
 
       final streamFile = _yt.videos.streamsClient.get(stream);
       final file = File(savePath);
@@ -259,7 +289,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
         final speedMB = elapsedSec > 0 ? (receivedBytes / (1024 * 1024)) / elapsedSec : 0.0;
 
         setState(() {
-          _downloadProgress = receivedBytes / totalBytes;
+          _downloadProgress = totalBytes > 0 ? receivedBytes / totalBytes : 0.0;
           _downloadSpeed = '${speedMB.toStringAsFixed(1)} MB/s • ${(receivedBytes / (1024 * 1024)).toStringAsFixed(1)} / ${(totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
         });
       }
@@ -272,7 +302,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF1E1E28),
+            backgroundColor: const Color(0xFF171722),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             behavior: SnackBarBehavior.floating,
             content: Row(
@@ -280,7 +310,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                 const Icon(CupertinoIcons.checkmark_alt_circle_fill, color: Colors.greenAccent),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text('Downloaded: $sanitized.$ext',
+                  child: Text('Saved to Vault: $fileName',
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ],
@@ -319,31 +349,30 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
-          // Header Bar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFE50914), Color(0xFF9333EA)],
+                        colors: [Color(0xFFFF2A42), Color(0xFF9D4EDD)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFE50914).withOpacity(0.4),
-                          blurRadius: 12,
+                          color: const Color(0xFFFF2A42).withOpacity(0.45),
+                          blurRadius: 16,
                           offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: const Icon(CupertinoIcons.play_arrow_solid, color: Colors.white, size: 22),
+                    child: const Icon(CupertinoIcons.play_arrow_solid, color: Colors.white, size: 24),
                   ),
                   const SizedBox(width: 14),
                   const Column(
@@ -352,21 +381,28 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                       Text(
                         'StreamVault',
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.6,
                         ),
                       ),
                       Text(
-                        'ProMotion Sideload Edition',
-                        style: TextStyle(fontSize: 12, color: Colors.white38),
+                        'ProMotion 120Hz Pipeline',
+                        style: TextStyle(fontSize: 12, color: Colors.white38, letterSpacing: 0.2),
                       ),
                     ],
                   ),
                 ],
               ),
               IconButton(
-                icon: const Icon(CupertinoIcons.doc_on_clipboard, color: Colors.white70),
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(CupertinoIcons.doc_on_clipboard, color: Colors.white, size: 20),
+                ),
                 onPressed: _pasteFromClipboard,
                 tooltip: 'Paste Link',
               ),
@@ -375,17 +411,16 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
 
           const SizedBox(height: 24),
 
-          // Search Bar Input
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF161622),
-              borderRadius: BorderRadius.circular(18),
+              color: const Color(0xFF12121A),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white.withOpacity(0.08)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 )
               ],
             ),
@@ -393,33 +428,44 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
               controller: _urlController,
               style: const TextStyle(fontSize: 15),
               decoration: InputDecoration(
-                hintText: 'Paste streaming link...',
+                hintText: 'Paste video link or direct URL...',
                 hintStyle: const TextStyle(color: Colors.white30, fontSize: 14),
                 prefixIcon: const Icon(CupertinoIcons.link, color: Colors.white38, size: 18),
-                suffixIcon: IconButton(
-                  icon: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE50914),
-                      shape: BoxShape.circle,
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.all(6.0),
+                  child: GestureDetector(
+                    onTap: _fetchMedia,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF2A42), Color(0xFFFF5268)],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF2A42).withOpacity(0.4),
+                            blurRadius: 10,
+                          )
+                        ],
+                      ),
+                      child: const Icon(CupertinoIcons.arrow_right, color: Colors.white, size: 16),
                     ),
-                    child: const Icon(CupertinoIcons.arrow_right, color: Colors.white, size: 14),
                   ),
-                  onPressed: _fetchMedia,
                 ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
               onSubmitted: (_) => _fetchMedia(),
             ),
-          ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+          ).animate().fadeIn(delay: 80.ms, duration: 400.ms),
 
           if (_isLoading) ...[
             const SizedBox(height: 40),
             Center(
               child: Column(
                 children: [
-                  const CircularProgressIndicator(color: Color(0xFFE50914), strokeWidth: 2.5),
+                  const CircularProgressIndicator(color: Color(0xFFFF2A42), strokeWidth: 2.5),
                   const SizedBox(height: 16),
                   Text(_statusMessage, style: const TextStyle(color: Colors.white54, fontSize: 13)),
                 ],
@@ -437,19 +483,18 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
             ),
           ],
 
-          // Active Download Progress Card
           if (_isDownloading) ...[
             const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF171724),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE50914).withOpacity(0.4)),
+                color: const Color(0xFF141420),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFFF2A42).withOpacity(0.4)),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFE50914).withOpacity(0.15),
-                    blurRadius: 20,
+                    color: const Color(0xFFFF2A42).withOpacity(0.2),
+                    blurRadius: 25,
                   )
                 ],
               ),
@@ -460,31 +505,31 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'ARCHIVING STREAM',
+                        'DOWNLOADING TO VAULT',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFFE50914),
+                          color: Color(0xFFFF2A42),
                           letterSpacing: 1.2,
                         ),
                       ),
                       Text(
                         '${(_downloadProgress * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
                       value: _downloadProgress,
-                      minHeight: 6,
+                      minHeight: 7,
                       backgroundColor: Colors.white10,
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE50914)),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF2A42)),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
                     _downloadSpeed,
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
@@ -494,14 +539,19 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
             ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0),
           ],
 
-          // Video Result Card
           if (_videoMeta != null) ...[
             const SizedBox(height: 24),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF161622),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
+                color: const Color(0xFF12121B),
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
+                  )
+                ],
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
@@ -512,7 +562,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                     children: [
                       Image.network(
                         _videoMeta!.thumbnails.highResUrl,
-                        height: 210,
+                        height: 220,
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
@@ -523,10 +573,11 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                       ),
                       Container(
                         margin: const EdgeInsets.all(12),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.black.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withOpacity(0.1)),
                         ),
                         child: Text(
                           '${_videoMeta!.duration?.inMinutes ?? 0}:${((_videoMeta!.duration?.inSeconds ?? 0) % 60).toString().padLeft(2, '0')}',
@@ -536,7 +587,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                     ],
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -544,39 +595,47 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                           _videoMeta!.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: -0.3),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           '${_videoMeta!.author} • ${_videoMeta!.engagement.viewCount} views',
                           style: const TextStyle(fontSize: 12, color: Colors.white38),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
                         const Text(
-                          'SELECT RESOLUTION',
+                          'ALL AVAILABLE RESOLUTIONS',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Colors.white54,
-                            letterSpacing: 1.0,
+                            letterSpacing: 1.2,
                           ),
                         ),
                         const SizedBox(height: 10),
                         ..._videoStreams.map((stream) => Container(
                               margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E2E),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                color: const Color(0xFF181824),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white.withOpacity(0.06)),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(CupertinoIcons.film, color: Color(0xFFE50914), size: 18),
-                                      const SizedBox(width: 10),
+                                      Icon(
+                                        stream.videoQualityLabel.contains('1080') ||
+                                                stream.videoQualityLabel.contains('2160') ||
+                                                stream.videoQualityLabel.contains('1440')
+                                            ? CupertinoIcons.sparkles
+                                            : CupertinoIcons.film,
+                                        color: const Color(0xFFFF2A42),
+                                        size: 19,
+                                      ),
+                                      const SizedBox(width: 12),
                                       Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
@@ -585,7 +644,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                           ),
                                           Text(
-                                            '${(stream.size.totalMegaBytes).toStringAsFixed(1)} MB',
+                                            '${(stream.size.totalMegaBytes).toStringAsFixed(1)} MB • ${stream.container.name.toUpperCase()}',
                                             style: const TextStyle(color: Colors.white38, fontSize: 11),
                                           ),
                                         ],
@@ -595,7 +654,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                                   Row(
                                     children: [
                                       IconButton(
-                                        icon: const Icon(CupertinoIcons.play_circle_fill, color: Colors.white),
+                                        icon: const Icon(CupertinoIcons.play_circle_fill, color: Colors.white, size: 26),
                                         onPressed: () {
                                           HapticFeedback.lightImpact();
                                           Navigator.push(
@@ -603,7 +662,7 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                                             MaterialPageRoute(
                                               builder: (_) => PlayerScreen(
                                                 streamUrl: stream.url.toString(),
-                                                title: _videoMeta!.title,
+                                                title: '${_videoMeta!.title} (${stream.videoQualityLabel})',
                                                 isLocalFile: false,
                                               ),
                                             ),
@@ -612,55 +671,79 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
                                       ),
                                       IconButton(
                                         icon: const Icon(CupertinoIcons.arrow_down_circle_fill,
-                                            color: Color(0xFFE50914)),
+                                            color: Color(0xFFFF2A42), size: 26),
                                         onPressed: _isDownloading
                                             ? null
-                                            : () => _downloadStream(stream, _videoMeta!.title, false),
+                                            : () => _downloadStream(
+                                                  stream,
+                                                  _videoMeta!.title,
+                                                  false,
+                                                  stream.videoQualityLabel,
+                                                ),
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
                             )),
-                        ..._audioStreams.take(1).map((stream) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E2E),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.white.withOpacity(0.05)),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(CupertinoIcons.music_note, color: Colors.tealAccent, size: 18),
-                                      const SizedBox(width: 10),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Audio Only (M4A / High Quality)',
-                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                          ),
-                                          Text(
-                                            '${(stream.size.totalMegaBytes).toStringAsFixed(1)} MB',
-                                            style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(CupertinoIcons.arrow_down_circle_fill,
-                                        color: Colors.tealAccent),
-                                    onPressed: _isDownloading
-                                        ? null
-                                        : () => _downloadStream(stream, _videoMeta!.title, true),
-                                  ),
-                                ],
-                              ),
-                            )),
+                        if (_audioStreams.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          const Text(
+                            'STUDIO AUDIO TRACKS',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white54,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ..._audioStreams.take(2).map((stream) => Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF181824),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(CupertinoIcons.music_note, color: Colors.tealAccent, size: 19),
+                                        const SizedBox(width: 12),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Audio Only (${stream.audioCodec.toUpperCase()})',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                            ),
+                                            Text(
+                                              '${(stream.size.totalMegaBytes).toStringAsFixed(1)} MB • ${stream.bitrate.kiloBitsPerSecond.round()} kbps',
+                                              style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(CupertinoIcons.arrow_down_circle_fill,
+                                          color: Colors.tealAccent, size: 26),
+                                      onPressed: _isDownloading
+                                          ? null
+                                          : () => _downloadStream(
+                                                stream,
+                                                _videoMeta!.title,
+                                                true,
+                                                '${stream.bitrate.kiloBitsPerSecond.round()}kbps',
+                                              ),
+                                    ),
+                                  ],
+                                ),
+                              )),
+                        ],
                       ],
                     ),
                   ),
@@ -675,7 +758,703 @@ class _ExtractorScreenState extends State<ExtractorScreen> {
   }
 }
 
-/// Screen 2: Vault with File Management & AirDrop Share
+/// TAB 2: TMDB Cinema & TV Hub with In-App API Key & Read Token Support
+class TmdbDiscoveryScreen extends StatefulWidget {
+  const TmdbDiscoveryScreen({super.key});
+
+  @override
+  State<TmdbDiscoveryScreen> createState() => _TmdbDiscoveryScreenState();
+}
+
+class _TmdbDiscoveryScreenState extends State<TmdbDiscoveryScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  final Dio _dio = Dio();
+  String _apiKey = '';
+  String _readToken = '';
+  List<dynamic> _searchResults = [];
+  bool _loading = false;
+  String _status = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStoredKeys();
+  }
+
+  Future<void> _loadStoredKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _apiKey = prefs.getString('tmdb_api_key') ?? '';
+      _readToken = prefs.getString('tmdb_read_token') ?? '';
+    });
+    if (_hasCredentials) {
+      _fetchTrending();
+    }
+  }
+
+  bool get _hasCredentials => _apiKey.isNotEmpty || _readToken.isNotEmpty;
+
+  Map<String, dynamic> _buildHeadersAndParams([Map<String, dynamic>? queryParams]) {
+    final Map<String, dynamic> params = queryParams ?? {};
+    final Options options = Options();
+
+    if (_readToken.isNotEmpty) {
+      options.headers = {'Authorization': 'Bearer $_readToken'};
+    } else if (_apiKey.isNotEmpty) {
+      params['api_key'] = _apiKey;
+    }
+
+    return {'params': params, 'options': options};
+  }
+
+  Future<void> _saveKeys(String key, String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('tmdb_api_key', key.trim());
+    await prefs.setString('tmdb_read_token', token.trim());
+    setState(() {
+      _apiKey = key.trim();
+      _readToken = token.trim();
+    });
+    Navigator.pop(context);
+    _fetchTrending();
+  }
+
+  void _showApiKeyModal() {
+    final keyController = TextEditingController(text: _apiKey);
+    final tokenController = TextEditingController(text: _readToken);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF101018),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 28,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('TMDB Credentials', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(CupertinoIcons.xmark_circle_fill, color: Colors.white38),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Paste either your API Key (v3) OR your API Read Access Token (v4). It is encrypted strictly on your iPhone.',
+                style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 18),
+              const Text('API Key (v3)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: keyController,
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'e.g. 8d39f7a...',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: const Color(0xFF181824),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Read Access Token (v4 - Optional Alternative)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: tokenController,
+                obscureText: true,
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'eyJhbGciOi...',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: const Color(0xFF181824),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF2A42),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 5,
+                  ),
+                  onPressed: () => _saveKeys(keyController.text, tokenController.text),
+                  child: const Text('Save & Connect', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _fetchTrending() async {
+    if (!_hasCredentials) return;
+    setState(() => _loading = true);
+    try {
+      final config = _buildHeadersAndParams();
+      final res = await _dio.get(
+        'https://api.themoviedb.org/3/trending/all/day',
+        queryParameters: config['params'],
+        options: config['options'],
+      );
+      setState(() {
+        _searchResults = res.data['results'] ?? [];
+        _status = '';
+      });
+    } catch (e) {
+      setState(() => _status = 'Failed to load trending items. Verify your TMDB keys.');
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _searchQuery() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty || !_hasCredentials) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _loading = true;
+      _status = '';
+    });
+    try {
+      final config = _buildHeadersAndParams({'query': query});
+      final res = await _dio.get(
+        'https://api.themoviedb.org/3/search/multi',
+        queryParameters: config['params'],
+        options: config['options'],
+      );
+      setState(() {
+        _searchResults = res.data['results'] ?? [];
+        if (_searchResults.isEmpty) _status = 'No titles found.';
+      });
+    } catch (e) {
+      setState(() => _status = 'Search failed. Check your TMDB credentials.');
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TMDB Cinema',
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.6),
+                    ),
+                    Text('Global Catalog & Episode Guides', style: TextStyle(fontSize: 12, color: Colors.white38)),
+                  ],
+                ),
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      !_hasCredentials ? CupertinoIcons.gear_badge_xmark : CupertinoIcons.gear,
+                      color: !_hasCredentials ? Colors.orangeAccent : Colors.white70,
+                      size: 20,
+                    ),
+                  ),
+                  onPressed: _showApiKeyModal,
+                ),
+              ],
+            ),
+          ),
+          if (!_hasCredentials)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.orangeAccent.withOpacity(0.15), Colors.deepOrangeAccent.withOpacity(0.05)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(CupertinoIcons.sparkles, color: Colors.orangeAccent, size: 28),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Connect Your TMDB Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const SizedBox(height: 4),
+                          const Text('Tap the gear icon top right to paste your free TMDB API Key. Search series like Prison Break, stream trailers, and browse seasons.',
+                              style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.3)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF12121A),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    )
+                  ],
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search Prison Break, Breaking Bad, movies...',
+                    hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+                    prefixIcon: const Icon(CupertinoIcons.search, color: Colors.white38, size: 18),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                  ),
+                  onSubmitted: (_) => _searchQuery(),
+                ),
+              ),
+            ),
+          ],
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFFFF2A42))))
+          else if (_status.isNotEmpty)
+            Expanded(child: Center(child: Text(_status, style: const TextStyle(color: Colors.white38))))
+          else
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.65,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                ),
+                itemCount: _searchResults.length,
+                itemBuilder: (context, idx) {
+                  final item = _searchResults[idx];
+                  final title = item['title'] ?? item['name'] ?? 'Untitled';
+                  final posterPath = item['poster_path'];
+                  final voteAverage = (item['vote_average'] ?? 0.0).toStringAsFixed(1);
+                  final isTv = item['media_type'] == 'tv' || item.containsKey('first_air_date');
+
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => TmdbDetailScreen(
+                            id: item['id'],
+                            isTv: isTv,
+                            apiKey: _apiKey,
+                            readToken: _readToken,
+                            title: title,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF14141E),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                if (posterPath != null)
+                                  Image.network(
+                                    'https://image.tmdb.org/t/p/w500$posterPath',
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(color: Colors.white10),
+                                  )
+                                else
+                                  Container(color: Colors.white10, child: const Center(child: Icon(Icons.movie))),
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.star, color: Colors.amber, size: 12),
+                                        const SizedBox(width: 4),
+                                        Text(voteAverage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: -0.2),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ).animate().fadeIn(delay: (idx * 35).ms).slideY(begin: 0.1, end: 0);
+                },
+              ),
+            ),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+}
+
+/// Detail Screen for TMDB Shows & Movies with Episode Guides & Trailer Streamer
+class TmdbDetailScreen extends StatefulWidget {
+  final int id;
+  final bool isTv;
+  final String apiKey;
+  final String readToken;
+  final String title;
+
+  const TmdbDetailScreen({
+    super.key,
+    required this.id,
+    required this.isTv,
+    required this.apiKey,
+    required this.readToken,
+    required this.title,
+  });
+
+  @override
+  State<TmdbDetailScreen> createState() => _TmdbDetailScreenState();
+}
+
+class _TmdbDetailScreenState extends State<TmdbDetailScreen> {
+  final Dio _dio = Dio();
+  final YoutubeExplode _yt = YoutubeExplode();
+  Map<String, dynamic>? _details;
+  List<dynamic> _trailers = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDetails();
+  }
+
+  Map<String, dynamic> _buildHeadersAndParams([Map<String, dynamic>? queryParams]) {
+    final Map<String, dynamic> params = queryParams ?? {};
+    final Options options = Options();
+
+    if (widget.readToken.isNotEmpty) {
+      options.headers = {'Authorization': 'Bearer ${widget.readToken}'};
+    } else if (widget.apiKey.isNotEmpty) {
+      params['api_key'] = widget.apiKey;
+    }
+
+    return {'params': params, 'options': options};
+  }
+
+  Future<void> _fetchDetails() async {
+    try {
+      final endpoint = widget.isTv ? 'tv' : 'movie';
+      final config = _buildHeadersAndParams();
+
+      final detailRes = await _dio.get(
+        'https://api.themoviedb.org/3/$endpoint/${widget.id}',
+        queryParameters: config['params'],
+        options: config['options'],
+      );
+      final videoRes = await _dio.get(
+        'https://api.themoviedb.org/3/$endpoint/${widget.id}/videos',
+        queryParameters: config['params'],
+        options: config['options'],
+      );
+
+      setState(() {
+        _details = detailRes.data;
+        _trailers = (videoRes.data['results'] ?? [])
+            .where((v) => v['site'] == 'YouTube' && (v['type'] == 'Trailer' || v['type'] == 'Teaser'))
+            .toList();
+      });
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  Future<void> _playTrailer(String youtubeKey, String trailerTitle) async {
+    HapticFeedback.lightImpact();
+    try {
+      final manifest = await _yt.videos.streamsClient.getManifest(youtubeKey);
+      final stream = manifest.muxed.sortByVideoQuality().first;
+
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PlayerScreen(
+              streamUrl: stream.url.toString(),
+              title: '${widget.title} - $trailerTitle',
+              isLocalFile: false,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not stream trailer: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _yt.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF07070A),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFFF2A42))),
+      );
+    }
+
+    final backdrop = _details?['backdrop_path'];
+    final overview = _details?['overview'] ?? 'No overview available.';
+    final seasons = widget.isTv ? (_details?['seasons'] ?? []) : [];
+    final rating = (_details?['vote_average'] ?? 0.0).toStringAsFixed(1);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF07070A),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 280,
+            pinned: true,
+            backgroundColor: const Color(0xFF101018),
+            leading: IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(CupertinoIcons.chevron_back, color: Colors.white),
+              ),
+              onPressed: () => Navigator.pop(context),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (backdrop != null)
+                    Image.network(
+                      'https://image.tmdb.org/t/p/w1280$backdrop',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: Colors.black),
+                    )
+                  else
+                    Container(color: Colors.black),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.transparent, const Color(0xFF07070A)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF2A42).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFF2A42).withOpacity(0.5)),
+                        ),
+                        child: Text(
+                          widget.isTv ? 'SERIES' : 'MOVIE',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF2A42)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          const SizedBox(width: 4),
+                          Text('$rating / 10', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('STORY OVERVIEW',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.2)),
+                  const SizedBox(height: 8),
+                  Text(overview, style: const TextStyle(fontSize: 14, color: Colors.white70, height: 1.45)),
+                  const SizedBox(height: 26),
+                  if (_trailers.isNotEmpty) ...[
+                    const Text('OFFICIAL TRAILERS (AD-FREE PROMOTION STREAM)',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFFF2A42), letterSpacing: 1.2)),
+                    const SizedBox(height: 12),
+                    ..._trailers.map((tr) => Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF14141E),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                          ),
+                          child: ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF2A42).withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(CupertinoIcons.play_arrow_solid, color: Color(0xFFFF2A42), size: 16),
+                            ),
+                            title: Text(tr['name'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            trailing: const Icon(CupertinoIcons.chevron_right, size: 16, color: Colors.white38),
+                            onTap: () => _playTrailer(tr['key'], tr['name']),
+                          ),
+                        )),
+                    const SizedBox(height: 20),
+                  ],
+                  if (widget.isTv && seasons.isNotEmpty) ...[
+                    const Text('SEASONS & EPISODES',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white54, letterSpacing: 1.2)),
+                    const SizedBox(height: 12),
+                    ...seasons.map((s) => Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF14141E),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(s['name'] ?? 'Season', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  if (s['air_date'] != null)
+                                    Text('Premiered: ${s['air_date']}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.06),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text('${s['episode_count'] ?? 0} Episodes',
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        )),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// TAB 3: Saved Media Screen (Offline Vault) with AirDrop & Export
 class SavedMediaScreen extends StatefulWidget {
   const SavedMediaScreen({super.key});
 
@@ -734,7 +1513,7 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
                   children: [
                     Text(
                       'Offline Vault',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.6),
                     ),
                     Text(
                       'Archived Local Files',
@@ -743,7 +1522,14 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
                   ],
                 ),
                 IconButton(
-                  icon: const Icon(CupertinoIcons.arrow_2_circlepath, color: Colors.white70),
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(CupertinoIcons.arrow_2_circlepath, color: Colors.white70, size: 20),
+                  ),
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     _loadLocalFiles();
@@ -753,14 +1539,14 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
             ),
           ),
           if (_loading)
-            const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFFE50914))))
+            const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFFFF2A42))))
           else if (_files.isEmpty)
             Expanded(
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(CupertinoIcons.tray, size: 64, color: Colors.white.withOpacity(0.15)),
+                    Icon(CupertinoIcons.tray, size: 64, color: Colors.white.withOpacity(0.12)),
                     const SizedBox(height: 16),
                     const Text('Vault is currently empty', style: TextStyle(color: Colors.white38, fontSize: 15)),
                     const SizedBox(height: 6),
@@ -783,23 +1569,30 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF161622),
-                      borderRadius: BorderRadius.circular(18),
+                      color: const Color(0xFF14141E),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white.withOpacity(0.06)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6),
+                        )
+                      ],
                     ),
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       leading: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
                           color: isAudio
-                              ? Colors.tealAccent.withOpacity(0.1)
-                              : const Color(0xFFE50914).withOpacity(0.1),
+                              ? Colors.tealAccent.withOpacity(0.12)
+                              : const Color(0xFFFF2A42).withOpacity(0.12),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           isAudio ? CupertinoIcons.music_note : CupertinoIcons.play_rectangle_fill,
-                          color: isAudio ? Colors.tealAccent : const Color(0xFFE50914),
+                          color: isAudio ? Colors.tealAccent : const Color(0xFFFF2A42),
                           size: 20,
                         ),
                       ),
@@ -835,7 +1628,7 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
                         );
                       },
                     ),
-                  ).animate().fadeIn(delay: (index * 60).ms).slideY(begin: 0.1, end: 0);
+                  ).animate().fadeIn(delay: (index * 50).ms).slideY(begin: 0.1, end: 0);
                 },
               ),
             ),
@@ -846,7 +1639,6 @@ class _SavedMediaScreenState extends State<SavedMediaScreen> {
   }
 }
 
-/// Player Screen with ProMotion gesture controls & multi-speed selector
 class PlayerScreen extends StatefulWidget {
   final String streamUrl;
   final String title;
@@ -890,7 +1682,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         aspectRatio: _videoController.value.aspectRatio > 0 ? _videoController.value.aspectRatio : 16 / 9,
         playbackSpeeds: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
         materialProgressColors: ChewieProgressColors(
-          playedColor: const Color(0xFFE50914),
+          playedColor: const Color(0xFFFF2A42),
           handleColor: Colors.white,
           backgroundColor: Colors.white24,
         ),
@@ -914,7 +1706,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text(widget.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.black.withOpacity(0.8),
+        backgroundColor: Colors.black.withOpacity(0.85),
         leading: IconButton(
           icon: const Icon(CupertinoIcons.chevron_back),
           onPressed: () => Navigator.pop(context),
@@ -925,7 +1717,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ? const Text('Could not play video stream.', style: TextStyle(color: Colors.white54))
             : (_chewieController != null && _chewieController!.videoPlayerController.value.isInitialized)
                 ? Chewie(controller: _chewieController!)
-                : const CircularProgressIndicator(color: Color(0xFFE50914)),
+                : const CircularProgressIndicator(color: Color(0xFFFF2A42)),
       ),
     );
   }
